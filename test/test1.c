@@ -1,12 +1,12 @@
 /*******************************************************************************
- * Copyright (c) 2009, 2017 IBM Corp.
+ * Copyright (c) 2009, 2018 IBM Corp.
  *
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  *
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    https://www.eclipse.org/legal/epl-2.0/
  * and the Eclipse Distribution License is available at
  *   http://www.eclipse.org/org/documents/edl-v10.php.
  *
@@ -21,13 +21,6 @@
  * @file
  * Tests for the MQ Telemetry MQTT C client
  */
-
-
-/*
-#if !defined(_RTSHEADER)
-	#include <rts.h>
-#endif
-*/
 
 #include "MQTTClient.h"
 #include <string.h>
@@ -63,7 +56,7 @@ struct Options
 	int iterations;
 } options =
 {
-	"tcp://iot.eclipse.org:1883",
+	"tcp://mqtt.eclipse.org:1883",
 	NULL,
 	"tcp://localhost:1883",
 	0,
@@ -157,18 +150,30 @@ void MyLog(int LOGA_level, char* format, ...)
 {
 	static char msg_buf[256];
 	va_list args;
+#if defined(_WIN32) || defined(_WINDOWS)
 	struct timeb ts;
-
-	struct tm *timeinfo;
+#else
+	struct timeval ts;
+#endif
+	struct tm timeinfo;
 
 	if (LOGA_level == LOGA_DEBUG && options.verbose == 0)
 	  return;
 
+#if defined(_WIN32) || defined(_WINDOWS)
 	ftime(&ts);
-	timeinfo = localtime(&ts.time);
-	strftime(msg_buf, 80, "%Y%m%d %H%M%S", timeinfo);
+	localtime_s(&timeinfo, &ts.time);
+#else
+	gettimeofday(&ts, NULL);
+	localtime_r(&ts.tv_sec, &timeinfo);
+#endif
+	strftime(msg_buf, 80, "%Y%m%d %H%M%S", &timeinfo);
 
+#if defined(_WIN32) || defined(_WINDOWS)
 	sprintf(&msg_buf[strlen(msg_buf)], ".%.3hu ", ts.millitm);
+#else
+	sprintf(&msg_buf[strlen(msg_buf)], ".%.3lu ", ts.tv_usec / 1000L);
+#endif
 
 	va_start(args, format);
 	vsnprintf(&msg_buf[strlen(msg_buf)], sizeof(msg_buf) - strlen(msg_buf), format, args);
@@ -179,7 +184,7 @@ void MyLog(int LOGA_level, char* format, ...)
 }
 
 
-#if defined(WIN32) || defined(_WINDOWS)
+#if defined(_WIN32) || defined(_WINDOWS)
 #define mqsleep(A) Sleep(1000*A)
 #define START_TIME_TYPE DWORD
 static DWORD start_time = 0;
@@ -209,7 +214,7 @@ START_TIME_TYPE start_clock(void)
 #endif
 
 
-#if defined(WIN32)
+#if defined(_WIN32)
 long elapsed(START_TIME_TYPE start_time)
 {
 	return GetTickCount() - start_time;
@@ -483,7 +488,7 @@ void test2_sendAndReceive(MQTTClient* c, int qos, char* test_topic)
 			rc = MQTTClient_publishMessage(c, test_topic, &test2_pubmsg, &dt);
 		assert("Good rc from publish", rc == MQTTCLIENT_SUCCESS, "rc was %d", rc);
 
-		#if defined(WIN32)
+		#if defined(_WIN32)
 			Sleep(100);
 		#else
 			usleep(100000L);
@@ -493,7 +498,7 @@ void test2_sendAndReceive(MQTTClient* c, int qos, char* test_topic)
 		while ((test2_arrivedcount < i) && (wait_seconds-- > 0))
 		{
 			MyLog(LOGA_DEBUG, "Arrived %d count %d", test2_arrivedcount, i);
-			#if defined(WIN32)
+			#if defined(_WIN32)
 				Sleep(1000);
 			#else
 				usleep(1000000L);
@@ -512,7 +517,7 @@ void test2_sendAndReceive(MQTTClient* c, int qos, char* test_topic)
 		while ((test2_deliveryCompleted < iterations) && (wait_seconds-- > 0))
 		{
 			MyLog(LOGA_DEBUG, "Delivery Completed %d count %d", test2_deliveryCompleted, i);
-			#if defined(WIN32)
+			#if defined(_WIN32)
 				Sleep(1000);
 			#else
 				usleep(1000000L);
@@ -547,7 +552,7 @@ int test2(struct Options options)
 	opts.MQTTVersion = options.MQTTVersion;
 	opts.username = "testuser";
 	opts.binarypwd.data = "testpassword";
-	opts.binarypwd.len = strlen(opts.binarypwd.data);
+	opts.binarypwd.len = (int)strlen(opts.binarypwd.data);
 	if (options.haconnections != NULL)
 	{
 		opts.serverURIs = options.haconnections;
@@ -1013,7 +1018,7 @@ int test6(struct Options options)
 	count = 0;
 	while (++count < 40)
 	{
-		#if defined(WIN32)
+		#if defined(_WIN32)
 			Sleep(1000L);
 		#else
 			sleep(1);
@@ -1068,7 +1073,7 @@ int test6a(struct Options options)
 	opts.MQTTVersion = MQTTVERSION_3_1_1;
 	opts.will = &wopts;
 	opts.will->payload.data = test6_will_message;
-	opts.will->payload.len = strlen(test6_will_message) + 1;
+	opts.will->payload.len = (int)strlen(test6_will_message) + 1;
 	opts.will->qos = 1;
 	opts.will->retained = 0;
 	opts.will->topicName = test6_will_topic;
@@ -1121,7 +1126,7 @@ int test6a(struct Options options)
 	count = 0;
 	while (++count < 40)
 	{
-		#if defined(WIN32)
+		#if defined(_WIN32)
 			Sleep(1000L);
 		#else
 			sleep(1);
@@ -1166,7 +1171,7 @@ int main(int argc, char** argv)
 	fprintf(xml, "<testsuite name=\"test1\" tests=\"%d\">\n", (int)(ARRAY_SIZE(tests) - 1));
 
 	setenv("MQTT_C_CLIENT_TRACE", "ON", 1);
-	setenv("MQTT_C_CLIENT_TRACE_LEVEL", "ERROR", 0);
+	setenv("MQTT_C_CLIENT_TRACE_LEVEL", "ERROR", 1);
 
 	getopts(argc, argv);
 

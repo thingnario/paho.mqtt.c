@@ -1,25 +1,80 @@
-# Eclipse Paho MQTT C client
+[![Build Status](https://travis-ci.org/eclipse/paho.mqtt.c.svg?branch=master)](https://travis-ci.org/eclipse/paho.mqtt.c)
+[![Total Alerts](https://img.shields.io/lgtm/alerts/g/eclipse/paho.mqtt.c.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/eclipse/paho.mqtt.c/alerts/)
+[![Coverity Scan Build Status](https://scan.coverity.com/projects/2339/badge.svg)](https://scan.coverity.com/projects/paho-c)
+
+# Eclipse Paho C Client Library for the MQTT Protocol
 
 This repository contains the source code for the [Eclipse Paho](http://eclipse.org/paho) MQTT C client library.
 
 This code builds libraries which enable applications to connect to an [MQTT](http://mqtt.org) broker to publish messages, and to subscribe to topics and receive published messages.
 
-Both synchronous and asynchronous modes of operation are supported.
+Synchronous and various asynchronous programming models are supported.
 
-## Build Status
+## Information About MQTT
 
-Linux Build Status: [![Linux Build Status](https://travis-ci.org/eclipse/paho.mqtt.c.svg?branch=master)](https://travis-ci.org/eclipse/paho.mqtt.c)
+* [MQTT website](http://mqtt.org)
+* [The MQTT 3.1.1 standard](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html)
+* [The MQTT 5.0 standard](https://docs.oasis-open.org/mqtt/mqtt/v5.0/mqtt-v5.0.html)
+* [HiveMQ introduction to MQTT](https://www.hivemq.com/mqtt/)
+* [OASIS Introduction to MQTT presentation](https://www.oasis-open.org/committees/download.php/49205/MQTT-OASIS-Webinar.pdf)
 
 ## Libraries
 
-The Paho C client comprises four shared libraries:
+The Paho C client comprises four variant libraries, shared or static:
 
- * libmqttv3a.so - asynchronous
- * libmqttv3as.so - asynchronous with SSL
- * libmqttv3c.so - "classic" / synchronous
- * libmqttv3cs.so - "classic" / synchronous with SSL
+ * paho-mqtt3a - asynchronous (MQTTAsync)
+ * paho-mqtt3as - asynchronous with SSL (MQTTAsync)
+ * paho-mqtt3c - "classic" / synchronous (MQTTClient)
+ * paho-mqtt3cs - "classic" / synchronous with SSL (MQTTClient)
 
-Optionally, using the CMake build, you can build static versions of those libraries.
+[Which Paho C API to use, with some history, for context](https://modelbasedtesting.co.uk/2013/10/13/which-paho-mqtt-c-api-to-use-and-some-history/)
+
+## Usage and API
+
+Detailed API documentation [is available online](https://www.eclipse.org/paho/files/mqttdoc/MQTTClient/html/index.html).  It is also available by building the Doxygen docs in the  ``doc`` directory. 
+
+Samples are available in the Doxygen docs and also in ``src/samples`` for reference.  These are:
+
+- paho_c_pub.c and paho_c_sub.c: command line utilities to publish and subscribe, -h will give help
+- paho_cs_pub.c paho_cs_sub.c: command line utilities using MQTTClient to publish and subscribe
+- MQTTClient_publish.c,	MQTTClient_subscribe.c and MQTTClient_publish_async.c: MQTTClient simple code examples
+- MQTTAsync_publish.c and MQTTAsync_subscribe.c: MQTTAsync simple code examples						
+
+Some potentially useful blog posts:
+
+- [Paho client MQTT 5.0 support and command line utilities](https://modelbasedtesting.co.uk/2018/08/08/paho-c-client-mqtt-5-0-and-command-line-utilities/)
+- [MQTT, QoS and persistence](https://modelbasedtesting.co.uk/2013/11/24/mqtt-qos-and-persistence/)
+- [A story of MQTT 5.0](https://modelbasedtesting.co.uk/2018/04/09/a-story-of-mqtt-5-0/)
+
+[Various MQTT and MQTT-SN talks I've given.](https://modelbasedtesting.co.uk/talks-ive-given/)
+
+## Runtime tracing
+
+A number of environment variables control runtime tracing of the C library.
+
+Tracing is switched on using ``MQTT_C_CLIENT_TRACE`` (a value of ON traces to stdout, any other value should specify a file to trace to).
+
+The verbosity of the output is controlled using the  ``MQTT_C_CLIENT_TRACE_LEVEL`` environment variable - valid values are ERROR, PROTOCOL, MINIMUM, MEDIUM and MAXIMUM (from least to most verbose).
+
+The variable ``MQTT_C_CLIENT_TRACE_MAX_LINES`` limits the number of lines of trace that are output.
+
+```
+export MQTT_C_CLIENT_TRACE=ON
+export MQTT_C_CLIENT_TRACE_LEVEL=PROTOCOL
+```
+
+## Reporting bugs
+
+Please open issues in the Github project: https://github.com/eclipse/paho.mqtt.c/issues.
+
+## More information
+
+Discussion of the Paho clients takes place on the [Eclipse paho-dev mailing list](https://dev.eclipse.org/mailman/listinfo/paho-dev).
+
+General questions about the MQTT protocol are discussed in the [MQTT Google Group](https://groups.google.com/forum/?hl=en-US&fromgroups#!forum/mqtt).
+
+There is more information available via the [MQTT community site](http://mqtt.org).
+
 
 ## Build instructions for GNU Make
 
@@ -55,7 +110,7 @@ LDFLAGS | Flags passed to linker calls
 
 ## Build requirements / compilation using CMake
 
-There build process currently supports a number of Linux "flavors" including ARM and s390, OS X, AIX and Solaris as well as the Windows operating system. The build process requires the following tools:
+The build process currently supports a number of Linux "flavors" including ARM and s390, OS X, AIX and Solaris as well as the Windows operating system. The build process requires the following tools:
   * CMake (http://cmake.org)
   * Ninja (https://martine.github.io/ninja/) or
     GNU Make (https://www.gnu.org/software/make/), and
@@ -89,9 +144,11 @@ Before compiling, determine the value of some variables in order to configure fe
 
 Variable | Default Value | Description
 ------------ | ------------- | -------------
+PAHO_BUILD_SHARED | TRUE | Build a shared version of the libraries
 PAHO_BUILD_STATIC | FALSE | Build a static version of the libraries
+PAHO_HIGH_PERFORMANCE | FALSE | When set to true, the debugging aids internal tracing and heap tracking are not included.
 PAHO_WITH_SSL | FALSE | Flag that defines whether to build ssl-enabled binaries too. 
-OPENSSL_SEARCH_PATH | "" (system default) | Directory containing your OpenSSL installation (i.e. `/usr/local` when headers are in `/usr/local/include` and libraries are in `/usr/local/lib`)
+OPENSSL_ROOT_DIR | "" (system default) | Directory containing your OpenSSL installation (i.e. `/usr/local` when headers are in `/usr/local/include` and libraries are in `/usr/local/lib`)
 PAHO_BUILD_DOCUMENTATION | FALSE | Create and install the HTML based API documentation (requires Doxygen)
 PAHO_BUILD_SAMPLES | FALSE | Build sample programs
 MQTT_TEST_BROKER | tcp://localhost:1883 | MQTT connection URL for a broker to use during test execution
@@ -172,44 +229,14 @@ In this case the libraries and executable are not linked against OpenSSL Librari
 apt-get install gcc-mingw-w64-x86-64 gcc-mingw-w64-i686
 ```
 
-## Usage and API
+## Microsoft Windows
 
-Detailed API documentation is available by building the Doxygen docs in the  ``doc`` directory. A [snapshot is also available online](http://www.eclipse.org/paho/files/mqttdoc/Cclient/index.html).
+### Calling convention
 
-Samples are available in the Doxygen docs and also in ``src/samples`` for reference.
+As is normal for C programs on Windows, the calling convention is __cdecl.  See the Microsoft documentation here:
 
-Note that using the C headers from a C++ program requires the following declaration as part of the C++ code:
+https://docs.microsoft.com/en-us/cpp/cpp/cdecl?view=vs-2019
 
-```
-    extern "C" {
-    #include "MQTTClient.h"
-    #include "MQTTClientPersistence.h"
-    }
-```
+If you call this library from another language, you may need to take this into account.
 
-## Runtime tracing
 
-A number of environment variables control runtime tracing of the C library.
-
-Tracing is switched on using ``MQTT_C_CLIENT_TRACE`` (a value of ON traces to stdout, any other value should specify a file to trace to).
-
-The verbosity of the output is controlled using the  ``MQTT_C_CLIENT_TRACE_LEVEL`` environment variable - valid values are ERROR, PROTOCOL, MINIMUM, MEDIUM and MAXIMUM (from least to most verbose).
-
-The variable ``MQTT_C_CLIENT_TRACE_MAX_LINES`` limits the number of lines of trace that are output.
-
-```
-export MQTT_C_CLIENT_TRACE=ON
-export MQTT_C_CLIENT_TRACE_LEVEL=PROTOCOL
-```
-
-## Reporting bugs
-
-Please open issues in the Github project: https://github.com/eclipse/paho.mqtt.c/issues.
-
-## More information
-
-Discussion of the Paho clients takes place on the [Eclipse paho-dev mailing list](https://dev.eclipse.org/mailman/listinfo/paho-dev).
-
-General questions about the MQTT protocol are discussed in the [MQTT Google Group](https://groups.google.com/forum/?hl=en-US&fromgroups#!forum/mqtt).
-
-There is much more information available via the [MQTT community site](http://mqtt.org).

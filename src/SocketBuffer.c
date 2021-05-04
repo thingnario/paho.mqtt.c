@@ -1,12 +1,12 @@
 /*******************************************************************************
- * Copyright (c) 2009, 2017 IBM Corp.
+ * Copyright (c) 2009, 2020 IBM Corp.
  *
  * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
+ * are made available under the terms of the Eclipse Public License v2.0
  * and Eclipse Distribution License v1.0 which accompany this distribution.
  *
  * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
+ *    https://www.eclipse.org/legal/epl-2.0/
  * and the Eclipse Distribution License is available at
  *   http://www.eclipse.org/org/documents/edl-v10.php.
  *
@@ -34,7 +34,7 @@
 
 #include "Heap.h"
 
-#if defined(WIN32) || defined(WIN64)
+#if defined(_WIN32) || defined(_WIN64)
 #define iov_len len
 #define iov_base buf
 #endif
@@ -56,7 +56,7 @@ static List writes;
 
 
 int socketcompare(void* a, void* b);
-void SocketBuffer_newDefQ(void);
+int SocketBuffer_newDefQ(void);
 void SocketBuffer_freeDefQ(void);
 int pending_socketcompare(void* a, void* b);
 
@@ -76,26 +76,43 @@ int socketcompare(void* a, void* b)
 /**
  * Create a new default queue when one has just been used.
  */
-void SocketBuffer_newDefQ(void)
+int SocketBuffer_newDefQ(void)
 {
+	int rc = PAHO_MEMORY_ERROR;
+
 	def_queue = malloc(sizeof(socket_queue));
-	def_queue->buflen = 1000;
-	def_queue->buf = malloc(def_queue->buflen);
-	def_queue->socket = def_queue->index = 0;
-	def_queue->buflen = def_queue->datalen = 0;
+	if (def_queue)
+	{
+		def_queue->buflen = 1000;
+		def_queue->buf = malloc(def_queue->buflen);
+		if (def_queue->buf)
+		{
+			def_queue->socket = def_queue->index = 0;
+			def_queue->buflen = def_queue->datalen = def_queue->headerlen = 0;
+			rc = 0;
+		}
+	}
+	return rc;
 }
 
 
 /**
  * Initialize the socketBuffer module
  */
-void SocketBuffer_initialize(void)
+int SocketBuffer_initialize(void)
 {
+	int rc = 0;
+
 	FUNC_ENTRY;
-	SocketBuffer_newDefQ();
-	queues = ListInitialize();
+	rc = SocketBuffer_newDefQ();
+	if (rc == 0)
+	{
+		if ((queues = ListInitialize()) == NULL)
+			rc = PAHO_MEMORY_ERROR;
+	}
 	ListZero(&writes);
-	FUNC_EXIT;
+	FUNC_EXIT_RC(rc);
+	return rc;
 }
 
 
@@ -106,6 +123,7 @@ void SocketBuffer_freeDefQ(void)
 {
 	free(def_queue->buf);
 	free(def_queue);
+        def_queue = NULL;
 }
 
 
@@ -175,15 +193,18 @@ char* SocketBuffer_getQueuedData(int socket, size_t bytes, size_t* actual_len)
 		if (queue->datalen > 0)
 		{
 			void* newmem = malloc(bytes);
-			memcpy(newmem, queue->buf, queue->datalen);
+
 			free(queue->buf);
 			queue->buf = newmem;
+			if (!newmem)
+				goto exit;
+			memcpy(newmem, queue->buf, queue->datalen);
 		}
 		else
 			queue->buf = realloc(queue->buf, bytes);
 		queue->buflen = bytes;
 	}
-
+exit:
 	FUNC_EXIT;
 	return queue->buf;
 }
@@ -206,7 +227,7 @@ int SocketBuffer_getQueuedChar(int socket, char* c)
 		if (queue->index < queue->headerlen)
 		{
 			*c = queue->fixed_header[(queue->index)++];
-			Log(TRACE_MAX, -1, "index is now %d, headerlen %d", queue->index, queue->headerlen);
+			Log(TRACE_MAX, -1, "index is now %d, headerlen %d", queue->index, (int)queue->headerlen);
 			rc = SOCKETBUFFER_COMPLETE;
 			goto exit;
 		}
@@ -275,8 +296,8 @@ char* SocketBuffer_complete(int socket)
 
 
 /**
- * A socket operation had now completed so we can get rid of the queue
- * @param socket the socket for which the operation is now complete
+ * Queued a Charactor to a specific socket
+ * @param socket the socket for which to queue char for
  * @param c the character to queue
  */
 void SocketBuffer_queueChar(int socket, char c)
@@ -308,7 +329,7 @@ void SocketBuffer_queueChar(int socket, char c)
 		curq->fixed_header[(curq->index)++] = c;
 		curq->headerlen = curq->index;
 	}
-	Log(TRACE_MAX, -1, "queueChar: index is now %d, headerlen %d", curq->index, curq->headerlen);
+	Log(TRACE_MAX, -1, "queueChar: index is now %d, headerlen %d", curq->index, (int)curq->headerlen);
 	FUNC_EXIT;
 }
 
@@ -318,21 +339,27 @@ void SocketBuffer_queueChar(int socket, char c)
  * @param socket the socket for which the write was interrupted
  * @param count the number of iovec buffers
  * @param iovecs buffer array
+ * @param frees a set of flags indicating which of the iovecs array should be freed
  * @param total total data length to be written
  * @param bytes actual data length that was written
  */
 #if defined(OPENSSL)
-void SocketBuffer_pendingWrite(int socket, SSL* ssl, int count, iobuf* iovecs, int* frees, size_t total, size_t bytes)
+int SocketBuffer_pendingWrite(int socket, SSL* ssl, int count, iobuf* iovecs, int* frees, size_t total, size_t bytes)
 #else
-void SocketBuffer_pendingWrite(int socket, int count, iobuf* iovecs, int* frees, size_t total, size_t bytes)
+int SocketBuffer_pendingWrite(int socket, int count, iobuf* iovecs, int* frees, size_t total, size_t bytes)
 #endif
 {
 	int i = 0;
 	pending_writes* pw = NULL;
+	int rc = 0;
 
 	FUNC_ENTRY;
 	/* store the buffers until the whole packet is written */
-	pw = malloc(sizeof(pending_writes));
+	if ((pw = malloc(sizeof(pending_writes))) == NULL)
+	{
+		rc = PAHO_MEMORY_ERROR;
+		goto exit;
+	}
 	pw->socket = socket;
 #if defined(OPENSSL)
 	pw->ssl = ssl;
@@ -346,7 +373,9 @@ void SocketBuffer_pendingWrite(int socket, int count, iobuf* iovecs, int* frees,
 		pw->frees[i] = frees[i];
 	}
 	ListAppend(&writes, pw, sizeof(pw) + total);
-	FUNC_EXIT;
+exit:
+	FUNC_EXIT_RC(rc);
+	return rc;
 }
 
 
