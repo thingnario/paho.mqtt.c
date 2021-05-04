@@ -4,3 +4,8 @@
 *.swp
 *.pyc
 /build.paho
+
+CMakeCache.txt
+CMakeFiles/
+*.cmake
+VersionInfo.h
